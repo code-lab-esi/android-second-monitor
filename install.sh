@@ -2,7 +2,6 @@
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
-SHELL_CONFIG="${SHELL_CONFIG:-$HOME/.bashrc}"
 
 ALIASES_SHORT=(
   "mon-start"
@@ -19,7 +18,33 @@ SCRIPTS=(
   "mon_stop.sh"
 )
 
-echo "Installing second-monitor scripts..."
+detect_shell_config() {
+  local shell_name
+  shell_name="$(basename "${SHELL:-}")"
+
+  case "$shell_name" in
+    bash)  echo "${HOME}/.bashrc" ;;
+    zsh)   echo "${HOME}/.zshrc" ;;
+    fish)  echo "${HOME}/.config/fish/config.fish" ;;
+    *)
+      for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish"; do
+        [ -f "$f" ] && echo "$f" && return
+      done
+      echo "$HOME/.bashrc"
+      ;;
+  esac
+}
+
+alias_syntax() {
+  local shell_name
+  shell_name="$(basename "${SHELL:-}")"
+  [ "$shell_name" = "fish" ] && echo "fish" || echo "posix"
+}
+
+SHELL_CONFIG="${SHELL_CONFIG:-$(detect_shell_config)}"
+ALIAS_SYNTAX="$(alias_syntax)"
+
+echo "Detected shell config: $SHELL_CONFIG"
 
 mkdir -p "$INSTALL_DIR"
 
@@ -31,12 +56,24 @@ for i in "${!SCRIPTS[@]}"; do
   echo "  Installed: $dest"
 done
 
-echo "" >> "$SHELL_CONFIG"
-echo "# Second-monitor aliases" >> "$SHELL_CONFIG"
-echo "alias ${ALIASES_SHORT[0]}='${INSTALL_DIR}/${ALIASES_LONG[0]}'" >> "$SHELL_CONFIG"
-echo "alias ${ALIASES_SHORT[1]}='${INSTALL_DIR}/${ALIASES_LONG[1]}'" >> "$SHELL_CONFIG"
-echo "alias ${ALIASES_LONG[0]}='${INSTALL_DIR}/${ALIASES_LONG[0]}'" >> "$SHELL_CONFIG"
-echo "alias ${ALIASES_LONG[1]}='${INSTALL_DIR}/${ALIASES_LONG[1]}'" >> "$SHELL_CONFIG"
+write_alias() {
+  local name="$1"
+  local command="$2"
+  if [ "$ALIAS_SYNTAX" = "fish" ]; then
+    echo "alias $name \"$command\"" >> "$SHELL_CONFIG"
+  else
+    echo "alias $name='$command'" >> "$SHELL_CONFIG"
+  fi
+}
+
+{
+  echo ""
+  echo "# Second-monitor aliases"
+  write_alias "${ALIASES_SHORT[0]}" "${INSTALL_DIR}/${ALIASES_LONG[0]}"
+  write_alias "${ALIASES_SHORT[1]}" "${INSTALL_DIR}/${ALIASES_LONG[1]}"
+  write_alias "${ALIASES_LONG[0]}"  "${INSTALL_DIR}/${ALIASES_LONG[0]}"
+  write_alias "${ALIASES_LONG[1]}"  "${INSTALL_DIR}/${ALIASES_LONG[1]}"
+}
 
 echo ""
 echo "Aliases added to $SHELL_CONFIG:"
